@@ -14,7 +14,6 @@
 #define ALFREDO_NOU3 8
 
 #define RCM_COMM_EWD 1
-#define RCM_COMM_ROS 2
 
 #if RCM_HARDWARE_VERSION == RCM_ORIGINAL
 #define port1Pin 32
@@ -493,19 +492,6 @@ boolean wasEnabled = false;
 
 #include <ESP32_easy_wifi_data.h> //https://github.com/joshua-8/ESP32_easy_wifi_data >=v1.0.0
 
-#elif RCM_COMM_METHOD == RCM_COMM_ROS
-
-#include <micro_ros_arduino.h>
-#include <rcl/error_handling.h>
-#include <rcl/rcl.h>
-#include <rclc/executor.h>
-#include <rclc/rclc.h>
-#include <stdio.h>
-
-unsigned long lastEnableSentMillis = 0;
-boolean ROSCheckFail = false;
-
-#include "rcmros.h"
 
 #endif
 

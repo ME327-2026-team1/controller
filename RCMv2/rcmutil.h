@@ -79,11 +79,11 @@ void setupRSL()
 void enabledRSL()
 {
 #ifndef OVERWRITE_RSL
-    if (millis() % 500 < 250) {
-        setRSL(RSLcolor);
-    } else {
-        setRSL(CRGB(0, 0, 0));
-    }
+    // if (millis() % 500 < 250) {
+    setRSL(RSLcolor);
+    // } else {
+    // setRSL(CRGB(0, 0, 0));
+    // }
 #endif
 }
 void wifiFailRSL()
@@ -133,8 +133,6 @@ void setup()
 #if RCM_COMM_METHOD == RCM_COMM_EWD
     configWifi();
     EWD::setupWifi(WifiDataToParse, WifiDataToSend);
-#elif RCM_COMM_METHOD == RCM_COMM_ROS
-    setupROS();
 #endif
 #if RCM_HARDWARE_VERSION == ALFREDO_NOU3
     WiFi.setTxPower(WIFI_POWER_8_5dBm); // fix for wifi on nou3 thanks @torchtopher from mini FRC
@@ -145,27 +143,19 @@ boolean connectedToWifi()
 {
 #if RCM_COMM_METHOD == RCM_COMM_EWD
     return EWD::wifiConnected;
-#elif RCM_COMM_METHOD == RCM_COMM_ROS
-    return !ROSCheckFail;
 #endif
 }
 boolean connectionTimedOut()
 {
 #if RCM_COMM_METHOD == RCM_COMM_EWD
     return EWD::timedOut();
-#elif RCM_COMM_METHOD == RCM_COMM_ROS
-    return (millis() - lastEnableSentMillis) > rosWifiTimeout;
 #endif
 }
-
-extern void ROSrun();
 
 void loop()
 {
 #if RCM_COMM_METHOD == RCM_COMM_EWD
     EWD::runWifiCommunication();
-#elif RCM_COMM_METHOD == RCM_COMM_ROS
-    ROSrun();
 #endif
     if (!connectedToWifi() || connectionTimedOut()) {
         enabled = false;
