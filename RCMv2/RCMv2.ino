@@ -34,34 +34,37 @@ https://github.com/RCMgames/RCM-Hardware-Nibble
 // from https://github.com/RCMgames/useful-code/tree/main/boards
 */
 
-JEncoderAS5048bI2C encoder1 = JEncoderAS5048bI2C(false, 1.0, 0x58, 0, 0, true);
-JEncoderAS5048bI2C encoder2 = JEncoderAS5048bI2C(false, 1.0, 0x60, 0, 0, true);
-
-// TODO: do floats cause problems if the wheels have turned many times?
-float encoder1Pos = 0;
-float encoder2Pos = 0;
-float encoder1Vel = 0;
-float encoder2Vel = 0;
+JEncoderAS5048bI2C encoder1 = JEncoderAS5048bI2C(false, 1.0, 0x48, 10000, 100, true);
+JEncoderAS5048bI2C encoder2 = JEncoderAS5048bI2C(true, 1.0, 0x50, 10000, 100, true);
 
 // all the motor drivers
 JMotorDriverTMC7300 motor1Driver = JMotorDriverTMC7300(portA);
 JMotorDriverTMC7300 motor2Driver = JMotorDriverTMC7300(portB);
-JMotorDriverTMC7300 motor3Driver = JMotorDriverTMC7300(portC);
-JMotorDriverTMC7300 motor4Driver = JMotorDriverTMC7300(portD);
 
-float motor1Val = 0;
-float motor2Val = 0;
-float motor3Val = 0;
-float motor4Val = 0;
+// TODO: do floats cause problems if the wheels have turned many times?
+float local_left_pos = 0;
+float local_right_pos = 0;
+float local_left_vel = 0;
+float local_right_vel = 0;
+
+float local_left_motor_power = 0; // -1 to 1
+float local_right_motor_power = 0;
+
+// --- Tunable parameters ---
+float k_base = 0.0;       // baseline spring stiffness
+float k_terrain = 2.0;    // how much car velocity scales stiffness
+bool use4Motors = true;  // if true, motors 1&3 mirror each other, motors 2&4 mirror each other
+
 
 int32_t car_micros = 0;
 float car_batteryVoltage = 0;
 boolean car_button = false;
+// will add accelerometer from car 
 
-float car_1_pos = 0;
-float car_2_pos = 0;
-float car_1_vel = 0;
-float car_2_vel = 0;
+float remote_left_pos = 0;
+float remote_right_pos = 0;
+float remote_left_vel = 0;
+float remote_right_vel = 0;
 
 void Enabled()
 {
@@ -70,41 +73,42 @@ void Enabled()
     /*
     inputs:
     * enabled (true if car is connected)
-    * encoder1Pos, encoder2Pos (wheel positions)
-    * encoder1Vel, encoder2Vel (wheel velocities)
+    * local_left_pos, local_right_pos (wheel positions)
+    * local_left_vel, local_right_vel (wheel velocities)
     *
     *
     outputs:
-    * motor1Val, motor2Val, motor3Val, motor4Val (floats between -1 and 1 that control the motors)
+    * local_left_motor_power, local_right_motor_power, motor3Val, motor4Val (floats between -1 and 1 that control the motors)
     *
     *
     */
 
+    // float k = k_base + abs(remote_left_vel) * k_terrain;
+    // local_left_motor_power = -k * local_left_pos;
+    // local_right_motor_power = -k * local_right_pos;
+
     RSLcolor = (car_button ? CRGB(255, 255, 255) : CRGB(250, 45, 0));
 
+    local_left_motor_power = 0;
+    local_right_motor_power = 0;
+
     // set motors
-    motor1Driver.set(motor1Val);
-    motor2Driver.set(motor2Val);
-    motor3Driver.set(motor3Val);
-    motor4Driver.set(motor4Val);
+    motor1Driver.set(local_left_motor_power);
+    motor2Driver.set(local_right_motor_power);
+
 }
 
 void Enable()
 {
-    // turn on outputs
     motor1Driver.enable();
     motor2Driver.enable();
-    motor3Driver.enable();
-    motor4Driver.enable();
+
 }
 
 void Disable()
 {
-    // turn off outputs
     motor1Driver.disable();
     motor2Driver.disable();
-    motor3Driver.disable();
-    motor4Driver.disable();
 }
 
 void PowerOn()
@@ -122,20 +126,19 @@ void Always()
     encoder1.run();
     encoder2.run();
 
-    encoder1Pos = encoder1.getPos();
-    encoder2Pos = encoder2.getPos();
-    encoder1Vel = encoder1.getVel();
-    encoder2Vel = encoder2.getVel();
+    local_left_pos = encoder1.getPos();
+    local_right_pos = encoder2.getPos();
+    local_left_vel = encoder1.getVel();
+    local_right_vel = encoder2.getVel();
 
-    Serial.print(encoder1Pos);
-    Serial.print(", ");
-    Serial.print(encoder1Vel);
-    Serial.print(", ");
-    Serial.print(encoder2Pos);
-    Serial.print(", ");
-    Serial.println(encoder2Vel);
+    Serial.print(local_left_pos);
+    Serial.print(", \t");
+    Serial.print(local_left_vel);
+    Serial.print(", \t");
+    Serial.print(local_right_pos);
+    Serial.print(", \t");
+    Serial.println(local_right_vel);
 
-    // delay(1);
 }
 
 #if RCM_COMM_METHOD == RCM_COMM_EWD
@@ -147,10 +150,11 @@ void WifiDataToParse()
     car_batteryVoltage = EWD::recvFl();
     car_micros = EWD::recvIn();
     car_button = EWD::recvBl();
-    car_1_pos = EWD::recvFl();
-    car_2_pos = EWD::recvFl();
-    car_1_vel = EWD::recvFl();
-    car_2_vel = EWD::recvFl();
+    remote_left_pos = EWD::recvFl();
+    remote_right_pos = EWD::recvFl();
+    remote_left_vel = EWD::recvFl();
+    remote_right_vel = EWD::recvFl();
+    // get car acceleration data
 }
 void WifiDataToSend()
 {
@@ -159,10 +163,10 @@ void WifiDataToSend()
     EWD::sendFl(voltageComp.getSupplyVoltage());
     EWD::sendIn(micros());
     EWD::sendBl(digitalRead(0) == 0);
-    EWD::sendFl(encoder1Pos);
-    EWD::sendFl(encoder2Pos);
-    EWD::sendFl(encoder1Vel);
-    EWD::sendFl(encoder2Vel);
+    EWD::sendFl(local_left_pos);
+    EWD::sendFl(local_right_pos);
+    EWD::sendFl(local_left_vel);
+    EWD::sendFl(local_right_vel);
 }
 
 void configWifi()
