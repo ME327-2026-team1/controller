@@ -50,11 +50,9 @@ float local_right_vel = 0;
 float local_left_motor_power = 0; // -1 to 1
 float local_right_motor_power = 0;
 
-// --- Tunable parameters ---
-float k_base = 0.0;       // baseline spring stiffness
+// Tunable parameters
+float k_base = 1;       // baseline spring stiffness
 float k_terrain = 2.0;    // how much car velocity scales stiffness
-bool use4Motors = true;  // if true, motors 1&3 mirror each other, motors 2&4 mirror each other
-
 
 int32_t car_micros = 0;
 float car_batteryVoltage = 0;
@@ -83,14 +81,12 @@ void Enabled()
     *
     */
 
-    // float k = k_base + abs(remote_left_vel) * k_terrain;
-    // local_left_motor_power = -k * local_left_pos;
-    // local_right_motor_power = -k * local_right_pos;
 
     RSLcolor = (car_button ? CRGB(255, 255, 255) : CRGB(250, 45, 0));
 
-    local_left_motor_power = 0;
-    local_right_motor_power = 0;
+    local_left_motor_power = - k_base * local_left_pos;
+    local_right_motor_power = - k_base * local_right_pos;
+
 
     // set motors
     motor1Driver.set(local_left_motor_power);
