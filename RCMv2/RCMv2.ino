@@ -84,6 +84,7 @@ void Enabled()
 
     RSLcolor = (car_button ? CRGB(255, 255, 255) : CRGB(250, 45, 0));
 
+    // (springy) position to velocity
     local_left_motor_power = - k_base * local_left_pos;
     local_right_motor_power = - k_base * local_right_pos;
 
