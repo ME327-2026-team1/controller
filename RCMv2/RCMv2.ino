@@ -57,7 +57,7 @@ float k_terrain = 2.0;    // how much car velocity scales stiffness
 int32_t car_micros = 0;
 float car_batteryVoltage = 0;
 boolean car_button = false;
-// will add accelerometer from car 
+// will add accelerometer from car
 
 float remote_left_pos = 0;
 float remote_right_pos = 0;
@@ -81,8 +81,7 @@ void Enabled()
     *
     */
 
-
-    RSLcolor = (car_button ? CRGB(255, 255, 255) : CRGB(250, 45, 0));
+    RSLcolor = (car_button ? CRGB(255, 255, 255) : (voltageComp.getSupplyVoltage() < 7.0 ? CRGB(150, 0, 5) : CRGB(250, 45, 0)));
 
     // (springy) position to velocity
     local_left_motor_power = - k_base * local_left_pos;
