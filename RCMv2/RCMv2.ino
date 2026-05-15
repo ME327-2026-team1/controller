@@ -51,7 +51,7 @@ float local_left_motor_power = 0; // -1 to 1
 float local_right_motor_power = 0;
 
 // Tunable parameters
-float k_base = 1;       // baseline spring stiffness
+float k_base = 1.0;       // baseline spring stiffness
 float k_terrain = 2.0;    // how much car velocity scales stiffness
 
 int32_t car_micros = 0;
@@ -63,6 +63,7 @@ float remote_left_pos = 0;
 float remote_right_pos = 0;
 float remote_left_vel = 0;
 float remote_right_vel = 0;
+float remote_imu_accel_x = 0;
 
 void Enabled()
 {
@@ -83,9 +84,16 @@ void Enabled()
 
     RSLcolor = (car_button ? CRGB(255, 255, 255) : (voltageComp.getSupplyVoltage() < 7.0 ? CRGB(150, 0, 5) : CRGB(250, 45, 0)));
 
-    // (springy) position to velocity
-    local_left_motor_power = - k_base * local_left_pos;
-    local_right_motor_power = - k_base * local_right_pos;
+    // position to velocity with spring that gets stronger as car inclines up / accelerates forwards
+    float k = 0.0;
+    k = k_base + k_terrain * remote_imu_accel_x;
+
+    // TODO: include large k_wall for when car collides with wall
+    //       using ToF sensor data to pick up collision?
+
+
+    local_left_motor_power = - k * local_left_pos;
+    local_right_motor_power = - k * local_right_pos;
 
 
     // set motors
@@ -133,7 +141,10 @@ void Always()
     Serial.print(", \t");
     Serial.print(local_right_pos);
     Serial.print(", \t");
-    Serial.println(local_right_vel);
+    Serial.print(local_right_vel);
+    Serial.print(", \t");
+    Serial.println(remote_imu_accel_x);
+
 
 }
 
@@ -150,6 +161,7 @@ void WifiDataToParse()
     remote_right_pos = EWD::recvFl();
     remote_left_vel = EWD::recvFl();
     remote_right_vel = EWD::recvFl();
+    remote_imu_accel_x = EWD::recvFl();
     // get car acceleration data
 }
 void WifiDataToSend()
