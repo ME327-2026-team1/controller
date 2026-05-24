@@ -34,12 +34,12 @@ https://github.com/RCMgames/RCM-Hardware-Nibble
 // from https://github.com/RCMgames/useful-code/tree/main/boards
 */
 
-JEncoderAS5048bI2C encoder1 = JEncoderAS5048bI2C(false, 1.0, 0x48, 10000, 100, true);
-JEncoderAS5048bI2C encoder2 = JEncoderAS5048bI2C(true, 1.0, 0x50, 10000, 100, true);
+JEncoderAS5048bI2C encoder1 = JEncoderAS5048bI2C(false, 1.0, 0x50, 20000, 200, true); // left
+JEncoderAS5048bI2C encoder2 = JEncoderAS5048bI2C(true, 1.0, 0x48, 20000, 200, true); // right
 
 // all the motor drivers
-JMotorDriverTMC7300 motor1Driver = JMotorDriverTMC7300(portA);
-JMotorDriverTMC7300 motor2Driver = JMotorDriverTMC7300(portB);
+JMotorDriverTMC7300 motor1Driver = JMotorDriverTMC7300(portB); // left
+JMotorDriverTMC7300 motor2Driver = JMotorDriverTMC7300(portD); // right
 
 // TODO: do floats cause problems if the wheels have turned many times?
 float local_left_pos = 0;
@@ -49,14 +49,6 @@ float local_right_vel = 0;
 
 float local_left_motor_power = 0; // -1 to 1
 float local_right_motor_power = 0;
-
-// Tunable parameters
-float k_base = 0.5;       // baseline spring stiffness
-float k_terrain = 2.0;    // how much car velocity scales stiffness
-float b_damping = 0.05;    // damping coefficient for velocity
-float alpha = 0.05;       // IMU low-pass filter weight (lower = smoother, more lag)
-
-float filtered_accel_x = 0;
 
 int32_t car_micros = 0;
 float car_batteryVoltage = 0;
@@ -86,54 +78,20 @@ void Enabled()
     *
     */
 
+    local_left_motor_power = (remote_left_pos - local_left_pos) * 0.01 - local_left_vel * 0.01;
+    local_right_motor_power = (remote_right_pos - local_right_pos) * 0.01 - local_right_vel * 0.01;
+
     RSLcolor = (car_button ? CRGB(255, 255, 255) : (voltageComp.getSupplyVoltage() < 7.0 ? CRGB(150, 0, 5) : CRGB(250, 45, 0)));
 
-    // low-pass filter IMU to remove high-frequency noise
-    filtered_accel_x = alpha * remote_imu_accel_x + (1.0 - alpha) * filtered_accel_x;
-
-
-    // CONTROL CODE 
-
-    // position to velocity with spring that gets stronger as car inclines up / accelerates forwards
-    float k = k_base + k_terrain * filtered_accel_x;
-
-    // TODO: include large k_wall for when car collides with wall
-    //       using ToF sensor data to pick up collision?
-
-
-    // TODO: TEST THIS AND TRY TO FIX (currently, k<0 instance is oscillatory)
-    // if car is tilted downwards too much, controller pushes user in forward direction, goes to infinity if controller let go
-    // Potential fix (design choice!):
-    // if k < 0 because car downhill enough, only oppose if moving backwards, otherwise turn motor off to let wheels spin freely
-    if (k < 0) {
-        if (local_left_vel > 0) {
-            local_left_motor_power  = -k * local_left_pos  - b_damping * local_left_vel;
-        } else {
-            local_left_motor_power = 0;
-        }
-        if (local_right_vel > 0) {
-            local_right_motor_power = -k * local_right_pos - b_damping * local_right_vel;
-        } else {
-            local_right_motor_power = 0;
-        }
-    } else {
-        // if you want to run normally, with downwards tilt issue, just run the below 2 lines without if statement
-        local_left_motor_power  = -k * local_left_pos  - b_damping * local_left_vel;
-        local_right_motor_power = -k * local_right_pos - b_damping * local_right_vel;
-    }
-
-
     // set motors
-    motor1Driver.set(local_left_motor_power);
-    motor2Driver.set(local_right_motor_power);
-
+    motor1Driver.set(-local_left_motor_power);
+    motor2Driver.set(-local_right_motor_power);
 }
 
 void Enable()
 {
     motor1Driver.enable();
     motor2Driver.enable();
-
 }
 
 void Disable()
@@ -145,6 +103,8 @@ void Disable()
 void PowerOn()
 {
     // runs once on robot startup, set pin modes and use begin() if applicable here
+    Wire1.setClock(1000000);
+
     encoder1.useCustomWire(Wire1);
     encoder2.useCustomWire(Wire1);
     Wire1.begin();
@@ -170,9 +130,15 @@ void Always()
     Serial.print(", \t");
     Serial.print(local_right_vel);
     Serial.print(", \t");
-    Serial.println(remote_imu_accel_x);
+    Serial.print(remote_left_pos);
+    Serial.print(", \t");
+    Serial.print(remote_right_pos);
+    Serial.print(", \t");
 
-
+    // Serial.print(encoder1.getAutoGain());
+    // Serial.print(", \t");
+    // Serial.print(encoder2.getAutoGain());
+    Serial.println();
 }
 
 #if RCM_COMM_METHOD == RCM_COMM_EWD
@@ -206,12 +172,13 @@ void WifiDataToSend()
 
 void configWifi()
 {
-    EWD::mode = EWD::Mode::createAP;
-    EWD::APName = "BEJM_controller";
-    EWD::APPassword = "hapticsBEJM";
-    EWD::APPort = 25210;
-    EWD::resendTimeout = 55;
-    EWD::signalLossTimeout = 160;
+    EWD::mode = EWD::Mode::connectToNetwork;
+    EWD::routerName = "BEJM_controller";
+    EWD::routerPassword = "hapticsBEJM";
+    EWD::routerPort = 25210;
+    EWD::communicateWithIP = "192.168.4.1";
+    EWD::resendTimeout = 70;
+    EWD::signalLossTimeout = 110;
 }
 #endif
 
