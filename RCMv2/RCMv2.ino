@@ -41,6 +41,8 @@ JEncoderAS5048bI2C encoder2 = JEncoderAS5048bI2C(true, 1.0, 0x48, 20000, 200, tr
 JMotorDriverTMC7300 motor1Driver = JMotorDriverTMC7300(portB); // left
 JMotorDriverTMC7300 motor2Driver = JMotorDriverTMC7300(portD); // right
 
+SemaphoreHandle_t encoderMutex; // used to check whether it's save to edit encoder variables (multi threading)
+
 // TODO: do floats cause problems if the wheels have turned many times?
 float local_left_pos = 0;
 float local_right_pos = 0;
@@ -105,22 +107,35 @@ void PowerOn()
     // runs once on robot startup, set pin modes and use begin() if applicable here
     Wire1.setClock(1000000);
 
+    encoderMutex = xSemaphoreCreateMutex();
+
     encoder1.useCustomWire(Wire1);
     encoder2.useCustomWire(Wire1);
     Wire1.begin();
+
+    xTaskCreatePinnedToCore( // create task to run encoder tasks
+        encoderTaskFunction, /* Function to implement the task */
+        "EncoderTask", /* Name of the task */
+        15000, /* Stack size in words */
+        NULL, /* Task input parameter */
+        0, /* Priority of the task */
+        NULL, /* Task handle. */
+        0 /* Core on which task should run */
+    );
 }
 
 void Always()
 {
     // always runs if void loop is running, JMotor run() functions should be put here
     // (but only the "top level", for example if you call drivetrainController.run() you don't also need to call leftMotorController.run())
-    encoder1.run();
-    encoder2.run();
 
-    local_left_pos = encoder1.getPos();
-    local_right_pos = encoder2.getPos();
-    local_left_vel = encoder1.getVel();
-    local_right_vel = encoder2.getVel();
+    if (xSemaphoreTake(encoderMutex, 1) == pdTRUE) {
+        local_left_pos = encoder1.getPos();
+        local_right_pos = encoder2.getPos();
+        local_left_vel = encoder1.getVel();
+        local_right_vel = encoder2.getVel();
+        xSemaphoreGive(encoderMutex);
+    }
 
     Serial.print(local_left_pos);
     Serial.print(", \t");
@@ -133,12 +148,8 @@ void Always()
     Serial.print(remote_left_pos);
     Serial.print(", \t");
     Serial.print(remote_right_pos);
-    Serial.print(", \t");
-
-    // Serial.print(encoder1.getAutoGain());
-    // Serial.print(", \t");
-    // Serial.print(encoder2.getAutoGain());
     Serial.println();
+    delay(1);
 }
 
 #if RCM_COMM_METHOD == RCM_COMM_EWD
@@ -181,5 +192,18 @@ void configWifi()
     EWD::signalLossTimeout = 110;
 }
 #endif
+
+void encoderTaskFunction(void* pvParameters)
+{
+    while (true) { // infinite loop
+
+        if (xSemaphoreTake(encoderMutex, 1) == pdTRUE) {
+            encoder2.run();
+            encoder1.run();
+            xSemaphoreGive(encoderMutex);
+        }
+        delay(1);
+    }
+}
 
 #include "rcmutil.h"
