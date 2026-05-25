@@ -80,8 +80,8 @@ void Enabled()
     *
     */
 
-    local_left_motor_power = (remote_left_pos - local_left_pos) * 0.01 - local_left_vel * 0.01;
-    local_right_motor_power = (remote_right_pos - local_right_pos) * 0.01 - local_right_vel * 0.01;
+    local_left_motor_power = (remote_left_pos / 2.0 - local_left_pos) * 0.09;
+    local_right_motor_power = (remote_right_pos / 2.0 - local_right_pos) * 0.09;
 
     RSLcolor = (car_button ? CRGB(255, 255, 255) : (voltageComp.getSupplyVoltage() < 7.0 ? CRGB(150, 0, 5) : CRGB(250, 45, 0)));
 
@@ -94,6 +94,8 @@ void Enable()
 {
     motor1Driver.enable();
     motor2Driver.enable();
+    // encoder1.zeroCounter();
+    // encoder2.zeroCounter();
 }
 
 void Disable()
@@ -135,6 +137,11 @@ void Always()
         local_left_vel = encoder1.getVel();
         local_right_vel = encoder2.getVel();
         xSemaphoreGive(encoderMutex);
+    }
+
+    if(digitalRead(0) == 0) {
+        encoder1.zeroCounter();
+        encoder2.zeroCounter();
     }
 
     Serial.print(local_left_pos);
@@ -188,8 +195,8 @@ void configWifi()
     EWD::routerPassword = "hapticsBEJM";
     EWD::routerPort = 25210;
     EWD::communicateWithIP = "192.168.4.1";
-    EWD::resendTimeout = 70;
-    EWD::signalLossTimeout = 110;
+    EWD::resendTimeout = 20;
+    EWD::signalLossTimeout = 750;
 }
 #endif
 

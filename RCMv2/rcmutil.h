@@ -115,6 +115,8 @@ void disabledRSL()
 
 #endif
 
+#include <esp_wifi.h>
+
 void setup()
 {
     Serial.begin(115200);
@@ -137,6 +139,8 @@ void setup()
 #if RCM_HARDWARE_VERSION == ALFREDO_NOU3
     WiFi.setTxPower(WIFI_POWER_8_5dBm); // fix for wifi on nou3 thanks @torchtopher from mini FRC
 #endif
+    // WiFi.setTxPower(WIFI_POWER_8_5dBm);
+    esp_wifi_set_ps(WIFI_PS_NONE);
 }
 
 boolean connectedToWifi()
