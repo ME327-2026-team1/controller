@@ -7,6 +7,8 @@
 
 #include "rcm.h"
 
+#include <esp_wifi.h>
+
 extern void PowerOn();
 extern void Enable();
 extern void Disable();
@@ -137,6 +139,7 @@ void setup()
 #if RCM_HARDWARE_VERSION == ALFREDO_NOU3
     WiFi.setTxPower(WIFI_POWER_8_5dBm); // fix for wifi on nou3 thanks @torchtopher from mini FRC
 #endif
+    esp_wifi_set_ps(WIFI_PS_NONE);
 }
 
 boolean connectedToWifi()

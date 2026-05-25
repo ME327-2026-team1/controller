@@ -38,7 +38,7 @@ JEncoderAS5048bI2C encoder1 = JEncoderAS5048bI2C(false, 1.0, 0x48, 10000, 100, t
 JEncoderAS5048bI2C encoder2 = JEncoderAS5048bI2C(true, 1.0, 0x50, 10000, 100, true);
 
 // all the motor drivers
-JMotorDriverTMC7300 motor1Driver = JMotorDriverTMC7300(portA);
+JMotorDriverTMC7300 motor1Driver = JMotorDriverTMC7300(portD);
 JMotorDriverTMC7300 motor2Driver = JMotorDriverTMC7300(portB);
 
 // TODO: do floats cause problems if the wheels have turned many times?
@@ -60,15 +60,15 @@ float right_free_slope = 6.67f;
 float right_free_intercept = 0.0f;
 
 // --- Haptic tuning ---
-float k_base = 0.20f;        // baseline stiffness in free space
-float k_vel_gain = 5.00f;    // how strongly velocity deficit changes stiffness
+float k_base = 0.00f;        // baseline stiffness in free space
+float k_vel_gain = 3.00f;    // how strongly velocity deficit changes stiffness
 float k_min = 0.0f;          // allow fully light feel
 float k_max = 100.0f;          // safety cap
-float b_damping = 0.02f;     // small damping for stability
+float b_damping = 0.00f;     // small damping for stability
 
 // Filtering / smoothing
 float vel_alpha = 0.20f;     // low-pass filter for received wheel velocity
-float k_smooth = 0.20f;      // low-pass filter for k updates
+float k_smooth = 0.50f;      // low-pass filter for k updates
 
 // State
 float filtered_remote_left_vel = 0.0f;
@@ -101,7 +101,6 @@ float remote_imu_accel_x = 0;
 
 void Enabled()
 {
-
     // WRITE CONTROLS HERE!!
     /*
     inputs:
@@ -258,6 +257,7 @@ void Enable()
     motor1Driver.enable();
     motor2Driver.enable();
 
+
 }
 
 void Disable()
@@ -293,6 +293,8 @@ void Always()
     Serial.print(local_right_pos);
     Serial.print(", \t");
     Serial.print(filtered_remote_right_vel);
+    Serial.print(", \t");
+    Serial.print(k_left_eff);
     Serial.print(", \t");
 
     Serial.println(filtered_accel_x);
@@ -331,12 +333,13 @@ void WifiDataToSend()
 
 void configWifi()
 {
-    EWD::mode = EWD::Mode::createAP;
-    EWD::APName = "BEJM_controller";
-    EWD::APPassword = "hapticsBEJM";
-    EWD::APPort = 25210;
-    EWD::resendTimeout = 55;
-    EWD::signalLossTimeout = 160;
+    EWD::mode = EWD::Mode::connectToNetwork;
+    EWD::routerName = "BEJM_controller";
+    EWD::routerPassword = "hapticsBEJM";
+    EWD::routerPort = 25210;
+    EWD::communicateWithIP = "192.168.4.1";
+    EWD::resendTimeout = 20;
+    EWD::signalLossTimeout = 750;
 }
 #endif
 
