@@ -61,7 +61,7 @@ float right_free_intercept = 0.0f;
 
 // --- Haptic tuning ---
 float k_base = 0.00f;        // baseline stiffness in free space
-float k_vel_gain = 3.00f;    // how strongly velocity deficit changes stiffness
+float k_vel_gain = 5.00f;    // how strongly velocity deficit changes stiffness
 float k_min = 0.0f;          // allow fully light feel
 float k_max = 100.0f;          // safety cap
 float b_damping = 0.00f;     // small damping for stability
@@ -77,6 +77,30 @@ float k_left_eff = 0.20f;
 float k_right_eff = 0.20f;
 int left_motion_sign = 0;
 int right_motion_sign = 0;
+
+
+// --- Improved velocity-impedance tuning ---
+float left_expected_vel_f = 0.0f;
+float right_expected_vel_f = 0.0f;
+
+float left_err_f = 0.0f;
+float right_err_f = 0.0f;
+
+// how quickly the expected free-space velocity model moves
+float expected_alpha = 0.03f;
+
+// how quickly the error estimate moves
+float err_alpha = 0.07f;
+
+// how strongly controller motion suppresses stiffness updates
+float motion_scale = 0.25f;   // larger = less suppression
+
+// faster rise, slower fall is usually nice for haptics
+float k_up_rate = 0.15f;
+float k_down_rate = 0.05f;
+
+
+
 
 //
 // --- Tilt based resistance method ---
@@ -173,25 +197,30 @@ void Enabled()
 
 
     // -------------------------------------------------------------------------
-    // Wheel-by-wheel impedance estimate:
-    //   1) Predict the free-space wheel velocity from controller displacement
-    //   2) Compare actual car wheel velocity to that prediction
-    //   3) If actual < expected -> increase stiffness
-    //      If actual > expected -> decrease stiffness (bounded at 0)
+    // Wheel-by-wheel impedance estimate with motion-gating
+    //
+    // Goal:
+    //   - use free-space velocity model from controller position
+    //   - compare to measured wheel velocity
+    //   - suppress update while controller is moving quickly
+    //   - low-pass the expected velocity and the error to avoid spikes
     // -------------------------------------------------------------------------
 
     const float v_deadband = 0.02f;
     const float error_deadband = 0.01f;
-    const float dir_epsilon = 0.001f;
 
-    // Predicted free-space velocities from your fitted lines
-    float left_expected_vel  = left_free_slope  * local_left_pos  + left_free_intercept;
-    float right_expected_vel = right_free_slope * local_right_pos + right_free_intercept;
+    // Raw free-space predictions from controller position
+    float left_expected_raw  = left_free_slope  * local_left_pos  + left_free_intercept;
+    float right_expected_raw = right_free_slope * local_right_pos + right_free_intercept;
 
-    // Determine expected direction for each wheel with a little memory near zero
+    // Slowly filter the expected free-space velocity so it does NOT jump instantly
+    left_expected_vel_f  += expected_alpha * (left_expected_raw  - left_expected_vel_f);
+    right_expected_vel_f += expected_alpha * (right_expected_raw - right_expected_vel_f);
+
+    // Determine expected travel direction with memory near zero
     int left_dir = 0;
-    if (fabsf(left_expected_vel) > v_deadband) {
-        left_dir = (left_expected_vel > 0.0f) ? 1 : -1;
+    if (fabsf(left_expected_vel_f) > v_deadband) {
+        left_dir = (left_expected_vel_f > 0.0f) ? 1 : -1;
         left_motion_sign = left_dir;
     } else if (fabsf(local_left_pos) > v_deadband) {
         left_dir = (local_left_pos > 0.0f) ? 1 : -1;
@@ -201,8 +230,8 @@ void Enabled()
     }
 
     int right_dir = 0;
-    if (fabsf(right_expected_vel) > v_deadband) {
-        right_dir = (right_expected_vel > 0.0f) ? 1 : -1;
+    if (fabsf(right_expected_vel_f) > v_deadband) {
+        right_dir = (right_expected_vel_f > 0.0f) ? 1 : -1;
         right_motion_sign = right_dir;
     } else if (fabsf(local_right_pos) > v_deadband) {
         right_dir = (local_right_pos > 0.0f) ? 1 : -1;
@@ -211,34 +240,60 @@ void Enabled()
         right_dir = right_motion_sign;
     }
 
-    // Measure velocity "along the expected travel direction"
+    // Measured car velocity projected along expected direction
     float left_meas_along  = (left_dir  == 0) ? 0.0f : (left_dir  * filtered_remote_left_vel);
     float right_meas_along = (right_dir == 0) ? 0.0f : (right_dir * filtered_remote_right_vel);
 
-    // Compare against expected speed magnitude
-    float left_speed_error  = fabsf(left_expected_vel)  - left_meas_along;
-    float right_speed_error = fabsf(right_expected_vel) - right_meas_along;
+    // Velocity deficit: positive means the car is moving slower than expected
+    float left_err_raw  = fabsf(left_expected_vel_f)  - left_meas_along;
+    float right_err_raw = fabsf(right_expected_vel_f) - right_meas_along;
 
-    if (fabsf(left_speed_error) < error_deadband) {
-        left_speed_error = 0.0f;
+    // Low-pass the error so transient changes do not spike k
+    left_err_f  += err_alpha * (left_err_raw  - left_err_f);
+    right_err_f += err_alpha * (right_err_raw - right_err_f);
+
+    // Deadband around zero to avoid chatter
+    if (fabsf(left_err_f) < error_deadband) {
+        left_err_f = 0.0f;
     }
-    if (fabsf(right_speed_error) < error_deadband) {
-        right_speed_error = 0.0f;
+    if (fabsf(right_err_f) < error_deadband) {
+        right_err_f = 0.0f;
     }
 
-    // Convert velocity deficit to stiffness target
-    float left_k_target  = k_base + k_vel_gain * left_speed_error;
-    float right_k_target = k_base + k_vel_gain * right_speed_error;
+    // Motion gate based on how fast the controller handle is moving.
+    // When the user is moving the controller quickly, reduce adaptation.
+    // This prevents the system from mistaking normal transients for load.
+    float controller_motion = 0.5f * (fabsf(local_left_vel) + fabsf(local_right_vel));
+    float motion_gate = 1.0f / (1.0f + controller_motion / motion_scale);
+
+    // Map error to stiffness target.
+    // Positive error -> stiffer.
+    // Negative error -> lighter, but not below k_min.
+    float left_k_target  = k_base + motion_gate * k_vel_gain * left_err_f;
+    float right_k_target = k_base + motion_gate * k_vel_gain * right_err_f;
 
     left_k_target  = constrain(left_k_target,  k_min, k_max);
     right_k_target = constrain(right_k_target, k_min, k_max);
 
-    // Smooth k so the controller does not chatter
-    k_left_eff  = k_left_eff  + k_smooth * (left_k_target  - k_left_eff);
-    k_right_eff = k_right_eff + k_smooth * (right_k_target - k_right_eff);
+    // Asymmetric smoothing: stiffness can rise faster than it falls.
+    // This helps contrast without making free space feel heavy.
+    float left_k_delta = left_k_target - k_left_eff;
+    if (left_k_delta > 0.0f) {
+        left_k_delta = fminf(left_k_delta, k_up_rate);
+    } else {
+        left_k_delta = fmaxf(left_k_delta, -k_down_rate);
+    }
+    k_left_eff += left_k_delta;
 
-    // Final haptic rendering:
-    // stiffer when impeded, lighter when free, always stable because k >= 0
+    float right_k_delta = right_k_target - k_right_eff;
+    if (right_k_delta > 0.0f) {
+        right_k_delta = fminf(right_k_delta, k_up_rate);
+    } else {
+        right_k_delta = fmaxf(right_k_delta, -k_down_rate);
+    }
+    k_right_eff += right_k_delta;
+
+    // Final haptic rendering
     local_left_motor_power  = -k_left_eff  * local_left_pos  - b_damping * local_left_vel;
     local_right_motor_power = -k_right_eff * local_right_pos - b_damping * local_right_vel;
   
