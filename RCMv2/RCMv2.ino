@@ -41,7 +41,6 @@ JEncoderAS5048bI2C encoder2 = JEncoderAS5048bI2C(true, 1.0, 0x50, 10000, 100, tr
 JMotorDriverTMC7300 motor1Driver = JMotorDriverTMC7300(portD);
 JMotorDriverTMC7300 motor2Driver = JMotorDriverTMC7300(portB);
 
-// TODO: do floats cause problems if the wheels have turned many times?
 float local_left_pos = 0;
 float local_right_pos = 0;
 float local_left_vel = 0;
@@ -95,27 +94,20 @@ float err_alpha = 0.07f;
 // how strongly controller motion suppresses stiffness updates
 float motion_scale = 0.25f;   // larger = less suppression
 
-// faster rise, slower fall is usually nice for haptics
+// faster rise, slower fall for better haptic effect
 float k_up_rate = 0.15f;
 float k_down_rate = 0.05f;
 
 
 
 
-//
-// --- Tilt based resistance method ---
-//
-float k_base_accel = 0.5;       // baseline spring stiffness
-float k_terrain = 2.0;    // how much car velocity scales stiffness
-float b_damping_accel = 0.05;    // damping coefficient for velocity
-float acc_alpha = 0.05;       // IMU low-pass filter weight (lower = smoother, more lag)
-
+// accelerometer 
+float acc_alpha = 0.05;  
 float filtered_accel_x = 0;
 
 int32_t car_micros = 0;
 float car_batteryVoltage = 0;
 boolean car_button = false;
-// will add accelerometer from car
 
 float remote_left_pos = 0;
 float remote_right_pos = 0;
@@ -152,48 +144,12 @@ void Enabled()
 
 
 
-
-    // -------------------------------------------------------------------------
-    // tilt based resistance method
-    // -------------------------------------------------------------------------
-
-    // // position to velocity with spring that gets stronger as car inclines up / accelerates forwards
-    // float k = k_base_accel + k_terrain * filtered_accel_x;
-
-    // // TODO: TEST THIS AND TRY TO FIX (currently, k<0 instance is oscillatory)
-    // // if car is tilted downwards too much, controller pushes user in forward direction, goes to infinity if controller let go
-    // // Potential fix (design choice!):
-    // // if k < 0 because car downhill enough, only oppose if moving backwards, otherwise turn motor off to let wheels spin freely
-    // if (k < 0) {
-    //     if (local_left_vel > 0) {
-    //         local_left_motor_power  = -k * local_left_pos  - b_damping_accel * local_left_vel;
-    //     } else {
-    //         local_left_motor_power = 0;
-    //     }
-    //     if (local_right_vel > 0) {
-    //         local_right_motor_power = -k * local_right_pos - b_damping_accel * local_right_vel;
-    //     } else {
-    //         local_right_motor_power = 0;
-    //     }
-    // } else {
-    //     // if you want to run normally, with downwards tilt issue, just run the below 2 lines without if statement
-    //     local_left_motor_power  = -k * local_left_pos  - b_damping_accel * local_left_vel;
-    //     local_right_motor_power = -k * local_right_pos - b_damping_accel * local_right_vel;
-    // }
-
-
-
-
-
     // -------------------------------------------------------------------------
     // calibration code: pos to velocity (unilateral)
     // -------------------------------------------------------------------------
 
     // local_left_motor_power = -k_base * local_left_pos - b_damping * local_left_vel;
     // local_right_motor_power = -k_base * local_right_pos - b_damping * local_right_vel;
-
-
-
 
 
     // -------------------------------------------------------------------------
@@ -298,10 +254,7 @@ void Enabled()
     local_right_motor_power = -k_right_eff * local_right_pos - b_damping * local_right_vel;
   
 
-
-
-
-    // set motors (all methods)
+    // set motors
     motor1Driver.set(local_left_motor_power);
     motor2Driver.set(local_right_motor_power);
 
